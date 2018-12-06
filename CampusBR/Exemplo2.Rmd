@@ -1,0 +1,196 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
+```{r}
+# Instalação de pacotes
+#install.packages("tm")
+#install.packages("openxlsx")
+#install.packages("lubridate")
+#install.packages("tidyverse")
+#install.packages("ggplot2")
+#install.packages("SnowballC")
+#install.packages("RColorBrewer")
+#install.packages("wordcloud")
+#install.packages("biclust")
+#install.packages("igraph")
+#install.packages("fpc")
+
+```
+
+```{r}
+#Carregar bibliotecas
+library(tm)
+library(openxlsx)
+library(lubridate)
+library(tidyverse)
+library(ggplot2)
+library(SnowballC)
+library(RColorBrewer)
+library(wordcloud)
+library(biclust)
+library(igraph)
+library(fpc)
+
+```
+
+```{r}
+#Código para selecionar o arquivo com os monitoramentos
+
+#Importa a base
+df_base <- read.csv("Input/NFL_Superbowl_dataset.csv",sep=";")
+
+# Isolar o campo dos posts para realizar a pesquisa da quantidade de ocorrência
+# dos termos das tags
+
+df_Posts <- data.frame(df_base$text)
+
+#Renomeia a coluna
+colnames(df_Posts) <- "Posts"
+
+df_base
+
+summary(df_base)
+summary(df_Posts)
+
+
+```
+
+
+```{r}
+##########################################################################################
+#                                 Início da Análise                                      #
+##########################################################################################
+# **Load the R package for text mining and then load your texts into R.**
+
+#library(tm)
+#docs <- VCorpus(DirSource(cname))
+
+# Remove emoticons
+df_Posts$Posts <- sapply(df_Posts$Posts,function(row) iconv(row, "latin1", "UTF-8",sub=""))
+
+docs <- VCorpus(VectorSource(df_Posts$Posts))
+docs
+#
+
+## Preprocessing
+# Remove puntuação
+docs <- tm_map(docs,removePunctuation)
+
+# Remove numeros
+docs <- tm_map(docs, removeNumbers)
+
+# Converte texto para letras minusculas
+docs <- tm_map(docs, tolower)
+
+# Remove stopwords
+docs <- tm_map(docs, removeWords, stopwords("portuguese"))
+
+# Remove stopwords adicionais
+#docs <- tm_map(docs, removeWords, c("palavra_para_remover1", "palavra_para_remover2", "palavra_para_remover3"))
+
+# Remove espaços em branco sequenciais
+docs <- tm_map(docs, stripWhitespace)
+
+# Text stemming (radical das palavras) -> SEMPRE ANALISAR NECESSIDADE
+#docs <- tm_map(docs, stemDocument, language = "portuguese")
+
+docs <- tm_map(docs, PlainTextDocument)
+# *This is the end of the preprocessing stage.*   
+```
+
+```{r}
+### Stage the Data
+dtm <- DocumentTermMatrix(docs)
+tdm <- TermDocumentMatrix(docs)
+
+### Explore your data
+freq <- colSums(as.matrix(dtm))
+length(freq)
+ord <- order(freq)
+m <- as.matrix(dtm)
+dim(m)
+
+write.csv(m, file="Output/DocumentTermMatrix.csv")
+
+```
+
+```{r}
+freq <- colSums(as.matrix(dtm))
+
+### Word Frequency   
+head(table(freq), 20)  
+# The above output is two rows of numbers. The top number is the frequency with which 
+# words appear and the bottom number reflects how many words appear that frequently. 
+#
+tail(table(freq), 20)   
+# Considering only the 20 greatest frequencies
+#
+
+freq <- sort(colSums(as.matrix(dtm)), decreasing=TRUE)   
+head(freq, 10) 
+
+# The above matrix was created using a data transformation we made earlier. 
+# **An alternate view of term frequency:**   
+# This will identify all terms that appear frequently (in this case, 50 or more times).   
+findFreqTerms(dtm, lowfreq=50)   # Change "50" to whatever is most appropriate for your data.
+
+wf <- data.frame(word=names(freq), freq=freq)   
+head(wf)  
+```
+
+```{r}
+### Plot Word Frequencies
+# **Plot words that appear at least 50 times.**   
+   
+wf <- data.frame(word=names(freq), freq=freq)
+
+p <- ggplot(subset(wf, freq>50), aes(x = reorder(word, -freq), y = freq)) +
+          geom_bar(stat = "identity") + 
+          theme(axis.text.x=element_text(angle=45, hjust=1))
+p   
+#  
+```
+
+```{r}
+## Relationships Between Terms
+### Term Correlations
+# See the description above for more guidance with correlations.
+# If words always appear together, then correlation=1.0.    
+findAssocs(dtm, c("eagles" , "brady"), corlimit=0.25) # specifying a correlation limit of 0.25
+
+```
+
+```{r}
+### Word Clouds!   
+
+#Plot words that occur at least 25 times.
+set.seed(142)   
+wordcloud(names(freq), freq, min.freq=25)
+
+#Plot words that occur at least 100 times.
+set.seed(142)   
+wordcloud(names(freq), freq, max.words=100)
+
+#Add some color and plot words occurring at least 20 times.
+set.seed(142)   
+wordcloud(names(freq), freq, min.freq=20, scale=c(5, .1), colors=brewer.pal(6, "Dark2"))
+
+#Plot the 100 most frequently occurring words.
+set.seed(142)   
+dark2 <- brewer.pal(6, "Dark2")   
+wordcloud(names(freq), freq, max.words=100, rot.per=0.2, colors=dark2)
+```
+
